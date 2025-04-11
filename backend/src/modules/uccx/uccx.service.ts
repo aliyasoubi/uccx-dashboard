@@ -1,57 +1,67 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { RedisService } from '../redis/redis.service';
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosInstance } from 'axios';
+import { QueueData, OperatorData } from '../../common/interfaces';
+import { UccxConfig } from '../../config/configuration';
 
 @Injectable()
-export class UccxService implements OnModuleInit {
-  private logger = new Logger(UccxService.name);
-  private readonly CACHE_TTL = 60; // 1 minute cache TTL
-  private readonly POLLING_INTERVAL = 30000; // 30 seconds
+export class UccxService {
+  private readonly logger = new Logger(UccxService.name);
+  private readonly config: UccxConfig;
+  private readonly axiosInstance: AxiosInstance;
 
-  constructor(private readonly redisService: RedisService) {}
-
-  async onModuleInit() {
-    // Start polling UCCX data
-    this.startPolling();
+  constructor(private configService: ConfigService) {
+    this.config = this.configService.get<UccxConfig>('uccx');
+    
+    this.axiosInstance = axios.create({
+      baseURL: `${this.config.host}:${this.config.port}`,
+      auth: {
+        username: this.config.username,
+        password: this.config.password,
+      },
+      timeout: 5000,
+    });
   }
 
-  private async startPolling() {
-    setInterval(async () => {
+  private async retry<T>(fn: () => Promise<T>): Promise<T> {
+    let lastError: Error;
+    
+    for (let attempt = 1; attempt <= this.config.retryAttempts; attempt++) {
       try {
-        await this.fetchAndCacheUccxData();
+        return await fn();
       } catch (error) {
-        this.logger.error('Error polling UCCX data:', error);
+        lastError = error;
+        this.logger.warn(`Attempt ${attempt} failed: ${error.message}`);
+        if (attempt < this.config.retryAttempts) {
+          await new Promise(resolve => setTimeout(resolve, this.config.retryDelay));
+        }
       }
-    }, this.POLLING_INTERVAL);
-  }
-
-  private async fetchAndCacheUccxData() {
-    try {
-      // TODO: Implement actual UCCX API calls
-      // This is a placeholder for the actual implementation
-      const mockData = {
-        timestamp: new Date().toISOString(),
-        metrics: {
-          activeCalls: Math.floor(Math.random() * 100),
-          averageWaitTime: Math.floor(Math.random() * 300),
-          queueSize: Math.floor(Math.random() * 50),
-        },
-      };
-
-      // Cache the data
-      await this.redisService.set('uccx:current', mockData, this.CACHE_TTL);
-
-      // Publish update to Redis channel
-      await this.redisService.publish('uccx-updates', mockData);
-
-      this.logger.debug('UCCX data updated and cached');
-    } catch (error) {
-      this.logger.error('Error fetching UCCX data:', error);
-      throw error;
     }
+    
+    throw lastError;
   }
 
-  async getCurrentMetrics() {
-    return this.redisService.get('uccx:current');
+  async getQueueStats(): Promise<QueueData[]> {
+    return this.retry(async () => {
+      try {
+        const response = await this.axiosInstance.post(this.config.endpoints.queueStats);
+        return response.data;
+      } catch (error) {
+        this.logger.error('Failed to fetch queue stats:', error);
+        throw error;
+      }
+    });
+  }
+
+  async getAgentStats(): Promise<OperatorData[]> {
+    return this.retry(async () => {
+      try {
+        const response = await this.axiosInstance.post(this.config.endpoints.agentStats);
+        return response.data;
+      } catch (error) {
+        this.logger.error('Failed to fetch agent stats:', error);
+        throw error;
+      }
+    });
   }
 } 

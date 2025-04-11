@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { UccxService } from './uccx.service';
-import { RedisModule } from '../redis/redis.module';
+import { ConfigModule } from '../../config/config.module';
 
 @Module({
-  imports: [RedisModule],
+  imports: [ConfigModule],
   providers: [UccxService],
   exports: [UccxService],
 })
