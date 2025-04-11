@@ -1,0 +1,39 @@
+.layout {
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  background: #001529;
+  padding: 0 24px;
+}
+
+.logo {
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.content {
+  padding: 24px;
+  background: #f0f2f5;
+}
+
+.site-layout-content {
+  min-height: 280px;
+  padding: 24px;
+  background: #fff;
+}
+
+.ant-card {
+  margin-bottom: 24px;
+}
+
+.ant-statistic {
+  text-align: center;
+}
+
+.recharts-wrapper {
+  margin: 0 auto;
+} 
